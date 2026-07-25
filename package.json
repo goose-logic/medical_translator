@@ -22,6 +22,7 @@
   },
   "homepage": "https://github.com/goose-logic/medical_translator#readme",
   "dependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "ai": "latest",
     "better-auth": "^1.6.25",
     "drizzle-orm": "^0.45.2",
