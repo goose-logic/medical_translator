@@ -21,6 +21,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="bg-background">
+      <head>
+        <link
+          href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="text-foreground">
         <I18nProvider>
           {children}

@@ -16,7 +16,7 @@
   --color-destructive: #dc2626;
   --color-destructive-foreground: #ffffff;
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Arabic", "Noto Sans Bengali", sans-serif;
 
   --radius: 0.5rem;
 }
