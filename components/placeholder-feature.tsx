@@ -1,8 +1,8 @@
 'use client'
 
-import Link from 'next/link'
-import { ArrowLeft, Check, Rocket, type LucideIcon } from 'lucide-react'
+import { Check, Rocket, type LucideIcon } from 'lucide-react'
 import { useI18n } from '@/components/i18n-provider'
+import AppHeader from '@/components/app-header'
 
 interface PlaceholderFeatureProps {
   title: string
@@ -20,16 +20,9 @@ export default function PlaceholderFeature({
   const { t } = useI18n()
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-4xl mx-auto">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-primary hover:underline font-medium mb-6"
-        >
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          {t('Back to Dashboard')}
-        </Link>
-
+    <div className="min-h-screen bg-background">
+      <AppHeader />
+      <div className="max-w-4xl mx-auto p-4 pt-6">
         {/* Header */}
         <div className="mb-8 flex items-start gap-4">
           <span className="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-primary/10 text-primary flex-shrink-0">
@@ -79,11 +72,6 @@ export default function PlaceholderFeature({
           </p>
         </div>
 
-        {/* Back Link */}
-        <Link href="/" className="inline-flex items-center gap-2 text-primary hover:underline font-medium">
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          {t('Back to Dashboard')}
-        </Link>
       </div>
     </div>
   )

@@ -7,7 +7,30 @@ import { db } from '@/lib/db'
 import { translationCache } from '@/lib/db/schema'
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
 
-const TRANSLATION_MODEL = 'google/gemini-2.0-flash'
+// gpt-4o-mini is accessible on the AI Gateway free tier (unlike gemini-3.x /
+// claude-haiku-4.5, which are fully blocked for free-tier accounts).
+const TRANSLATION_MODEL = 'openai/gpt-4o-mini'
+
+/** Retry a generateText call with exponential backoff when the gateway is rate-limited (HTTP 429). */
+async function generateWithRetry(
+  args: Parameters<typeof generateText>[0],
+  maxRetries = 3,
+): Promise<Awaited<ReturnType<typeof generateText>>> {
+  let lastError: unknown
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await generateText(args)
+    } catch (error) {
+      lastError = error
+      const msg = error instanceof Error ? error.message : String(error)
+      const isRateLimited = msg.includes('429') || /rate.?limit/i.test(msg)
+      if (!isRateLimited || attempt === maxRetries) break
+      // Backoff: 0.5s, 1s, 2s
+      await new Promise((r) => setTimeout(r, 500 * 2 ** attempt))
+    }
+  }
+  throw lastError
+}
 
 /**
  * Translate an array of short UI strings into the target language.
@@ -74,7 +97,7 @@ Rules:
 - Do not add numbering, explanations, or markdown. Output must be valid JSON only.`
 
   try {
-    const { text } = await generateText({
+    const { text } = await generateWithRetry({
       model: TRANSLATION_MODEL,
       system: systemPrompt,
       prompt: `Translate these ${missing.length} strings:\n${numbered}`,
