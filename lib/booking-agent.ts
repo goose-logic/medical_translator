@@ -17,6 +17,7 @@ export const BOOKING_START_URL = 'https://bookings.herohealth.net/s/ysmx8v3z'
 type Session = {
   stagehand: Stagehand
   browserbaseSessionId: string
+  apiKey: string
   createdAt: number
   lastUsedAt: number
 }
@@ -51,6 +52,42 @@ function modelConfig() {
     apiKey: process.env.AI_GATEWAY_API_KEY,
     baseURL: 'https://ai-gateway.vercel.sh/v1',
     openaiEndpointFormat: 'chat' as const,
+  }
+}
+
+/**
+ * Fetch the live-view URL for the CURRENTLY ACTIVE page/tab. Hero Health
+ * navigates to new URLs (and sometimes new tabs), so the live view must follow
+ * the active page or it goes stale and stops reflecting the user's selections.
+ */
+async function getActiveLiveViewUrl(
+  stagehand: Stagehand,
+  browserbaseSessionId: string,
+  apiKey: string,
+): Promise<string | null> {
+  try {
+    let activeUrl = ''
+    try {
+      const page = stagehand.context.activePage()
+      activeUrl = page ? page.url() : ''
+    } catch {
+      activeUrl = ''
+    }
+
+    const bb = new Browserbase({ apiKey })
+    const live = await bb.sessions.debug(browserbaseSessionId)
+    const pages = live.pages ?? []
+
+    if (pages.length > 0) {
+      // Prefer the page whose URL matches the active page; otherwise use the
+      // most recently opened tab (new tabs are appended to the list).
+      const match = activeUrl ? pages.find((p) => p.url === activeUrl) : undefined
+      const chosen = match ?? pages[pages.length - 1]
+      return chosen.debuggerFullscreenUrl ?? chosen.debuggerUrl ?? live.debuggerFullscreenUrl ?? null
+    }
+    return live.debuggerFullscreenUrl ?? live.debuggerUrl ?? null
+  } catch {
+    return null
   }
 }
 
@@ -98,18 +135,12 @@ export async function startBookingSession(): Promise<StartResult> {
   const pageTitle = await page.title()
 
   // Fetch the live, embeddable debugger view so the user can watch the browser.
-  let liveViewUrl: string | null = null
-  try {
-    const bb = new Browserbase({ apiKey })
-    const live = await bb.sessions.debug(browserbaseSessionId)
-    liveViewUrl = live.debuggerFullscreenUrl ?? live.debuggerUrl ?? null
-  } catch {
-    liveViewUrl = null
-  }
+  const liveViewUrl = await getActiveLiveViewUrl(stagehand, browserbaseSessionId, apiKey)
 
   sessions.set(browserbaseSessionId, {
     stagehand,
     browserbaseSessionId,
+    apiKey,
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
   })
@@ -133,6 +164,23 @@ export type ProposedAction = {
 }
 
 /**
+ * Strip technical accessibility-role noise from an observed action description
+ * (e.g. "DisclosureTriangle for GP Appointments" -> "GP Appointments") so the
+ * text read aloud and shown to the user is plain and translation-friendly.
+ */
+function cleanDescription(raw: string): string {
+  let s = raw.trim()
+  // Remove leading role words like "Button to", "Link to", "DisclosureTriangle for".
+  s = s.replace(
+    /^(the\s+)?(disclosure\s*triangle|button|link|checkbox|radio(\s*button)?|option|menu\s*item|tab|image|icon)\s+(for|to|labeled|named|:)\s*/i,
+    '',
+  )
+  // Remove a trailing standalone role word (e.g. "GP Appointments button").
+  s = s.replace(/\s+(button|link|option|tab|checkbox)\.?$/i, '')
+  return s.trim() || raw.trim()
+}
+
+/**
  * Observe the current page for actions matching an instruction, WITHOUT acting.
  * Returns candidate actions whose descriptions can be spoken/translated and
  * confirmed by the user before execution.
@@ -140,32 +188,44 @@ export type ProposedAction = {
 export async function observeStep(
   sessionId: string,
   instruction: string,
-): Promise<{ actions: ProposedAction[]; pageTitle: string }> {
-  const { stagehand } = getSession(sessionId)
+): Promise<{ actions: ProposedAction[]; pageTitle: string; liveViewUrl: string | null }> {
+  const { stagehand, browserbaseSessionId, apiKey } = getSession(sessionId)
   const results = await stagehand.observe(instruction)
   const page = stagehand.context.activePage()
   const pageTitle = page ? await page.title() : ''
 
-  const actions: ProposedAction[] = (results ?? []).map((r) => ({
-    description: r.description ?? 'Action',
-    selector: r.selector ?? '',
-    method: r.method ?? 'click',
-  }))
+  // De-duplicate by description so the user sees distinct real options.
+  const seen = new Set<string>()
+  const actions: ProposedAction[] = []
+  for (const r of results ?? []) {
+    const description = cleanDescription(r.description ?? 'Action')
+    const key = description.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    actions.push({
+      description,
+      selector: r.selector ?? '',
+      method: r.method ?? 'click',
+    })
+  }
 
-  return { actions, pageTitle }
+  const liveViewUrl = await getActiveLiveViewUrl(stagehand, browserbaseSessionId, apiKey)
+  return { actions, pageTitle, liveViewUrl }
 }
 
 /** Execute a previously-observed action after the user has confirmed it. */
 export async function actStep(
   sessionId: string,
   action: ProposedAction,
-): Promise<{ ok: true; pageTitle: string }> {
-  const { stagehand } = getSession(sessionId)
+): Promise<{ ok: true; pageTitle: string; liveViewUrl: string | null }> {
+  const { stagehand, browserbaseSessionId, apiKey } = getSession(sessionId)
   await stagehand.act(action)
-  await new Promise((r) => setTimeout(r, 2000))
+  // Allow time for navigation, new tabs, or accordion expansion to settle.
+  await new Promise((r) => setTimeout(r, 3000))
   const page = stagehand.context.activePage()
   const pageTitle = page ? await page.title() : ''
-  return { ok: true, pageTitle }
+  const liveViewUrl = await getActiveLiveViewUrl(stagehand, browserbaseSessionId, apiKey)
+  return { ok: true, pageTitle, liveViewUrl }
 }
 
 /** Read a plain-language description of what's currently on the page. */

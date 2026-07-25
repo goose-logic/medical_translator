@@ -14,10 +14,12 @@ import {
   Volume2,
   Mic,
   Square,
+  RefreshCw,
+  MousePointerClick,
 } from 'lucide-react'
 import { useI18n } from '@/components/i18n-provider'
 import { synthesizeSpeech } from '@/app/actions/text-to-speech'
-import { transcribeConfirmation } from '@/app/actions/speech-to-text'
+import { transcribeConfirmation, transcribeChoice } from '@/app/actions/speech-to-text'
 
 type ProposedAction = {
   description: string
@@ -32,23 +34,12 @@ type TranscriptEntry = {
   text: string
 }
 
-// The ordered steps the agent walks through on the Hero Health booking flow,
-// each with a natural-language instruction for observe().
-const FLOW_STEPS: { instruction: string; label: string }[] = [
-  { instruction: 'accept or allow all cookies in the cookie consent dialog', label: 'Accept cookies' },
-  {
-    instruction: 'the list of appointment types the user can choose from, such as GP, Nurse or Pharmacist appointments',
-    label: 'Choose appointment type',
-  },
-  {
-    instruction: 'the specific appointment reason or sub-type options available after expanding a category',
-    label: 'Choose appointment reason',
-  },
-  {
-    instruction: 'the available appointment dates or the calendar date picker to select a day',
-    label: 'Choose a date',
-  },
-]
+// Accept cookies first (it blocks everything), then adaptively read whatever
+// real options the current page presents so the user picks the actual choice.
+const COOKIE_INSTRUCTION =
+  'accept or allow all cookies in the cookie consent dialog if one is shown'
+const CHOICES_INSTRUCTION =
+  'List the distinct clickable options the user must choose between to continue booking an appointment on this page right now. Prefer the most specific bookable choices that are currently visible — such as an "In person", "Remote", "Video" or "Telephone" appointment setting, a named appointment reason, or an available date or time. If a category has just been expanded, list the specific appointment options revealed inside it. Only if no specific options are visible, list the appointment category headings (such as GP, Nurse, Pharmacist, or Physician Associate). Always ignore site navigation menus, headers, footers, and cookie banners.'
 
 export default function BookingAgentClient() {
   const { t, language } = useI18n()
@@ -56,11 +47,10 @@ export default function BookingAgentClient() {
   const [liveViewUrl, setLiveViewUrl] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [stepIndex, setStepIndex] = useState(0)
   const [proposed, setProposed] = useState<ProposedAction[]>([])
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [finished, setFinished] = useState(false)
+  const [takeover, setTakeover] = useState(false)
   const [recording, setRecording] = useState(false)
   const [interpreting, setInterpreting] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -93,43 +83,58 @@ export default function BookingAgentClient() {
     }
   }, [])
 
-  async function callAgent(payload: Record<string, unknown>) {
-    const res = await fetch('/api/booking-agent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, language }),
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Request failed')
-    return data
-  }
+  const callAgent = useCallback(
+    async (payload: Record<string, unknown>) => {
+      const res = await fetch('/api/booking-agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, language }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Request failed')
+      return data
+    },
+    [language],
+  )
 
-  // Ask the agent to observe the current step and propose actions for the user
-  // to confirm. Nothing is clicked here.
-  const observeStep = useCallback(
-    async (sid: string, index: number) => {
-      const step = FLOW_STEPS[index]
-      if (!step) {
-        setFinished(true)
-        const doneMsg = t(
-          'We have reached the date selection. From here you will need to log in with your NHS account to finish booking.',
-        )
-        addEntry('system', doneMsg)
-        void speak(doneMsg)
-        return
-      }
+  // Read whatever options the current page offers and present them as choices.
+  // Nothing is clicked here — the user decides.
+  const observeOptions = useCallback(
+    async (sid: string, opts: { cookie?: boolean } = {}): Promise<void> => {
       setBusy(true)
       setError(null)
+      setTakeover(false)
       try {
-        const data = await callAgent({ action: 'observe', sessionId: sid, instruction: step.instruction })
+        const instruction = opts.cookie ? COOKIE_INSTRUCTION : CHOICES_INSTRUCTION
+        const data = await callAgent({ action: 'observe', sessionId: sid, instruction })
+        if (data.liveViewUrl) setLiveViewUrl(data.liveViewUrl)
         const actions: ProposedAction[] = data.actions ?? []
+
+        // No cookie banner? Move straight on to the real choices.
+        if (opts.cookie && actions.length === 0) {
+          await observeOptions(sid, { cookie: false })
+          return
+        }
+
         setProposed(actions)
+
         if (actions.length === 0) {
-          addEntry('system', t('I could not find anything to do on this step. You can skip it.'))
+          setTakeover(true)
+          const msg = t(
+            'I could not find any more options to choose here. You may have reached the date or login step — you can interact with the website directly below, or sign in to finish booking.',
+          )
+          addEntry('system', msg)
+          void speak(msg)
+        } else if (actions.length === 1) {
+          const only = actions[0]
+          const prompt = `${t('Next step')}: ${only.translatedDescription || only.description}. ${t('Shall I continue?')}`
+          addEntry('agent', prompt)
+          void speak(prompt)
         } else {
-          const first = actions[0]
-          const spoken = first.translatedDescription || first.description
-          const prompt = `${t('Next step')}: ${spoken}. ${t('Shall I continue?')}`
+          const list = actions
+            .map((a, i) => `${i + 1}. ${a.translatedDescription || a.description}`)
+            .join('  ')
+          const prompt = `${t('Please choose one of these options:')} ${list}`
           addEntry('agent', prompt)
           void speak(prompt)
         }
@@ -139,7 +144,7 @@ export default function BookingAgentClient() {
         setBusy(false)
       }
     },
-    [addEntry, language, speak, t],
+    [callAgent, addEntry, speak, t],
   )
 
   const handleStart = useCallback(async () => {
@@ -153,46 +158,42 @@ export default function BookingAgentClient() {
         addEntry('agent', data.message)
         void speak(data.message)
       }
-      await observeStep(data.sessionId, 0)
+      await observeOptions(data.sessionId, { cookie: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not start the booking assistant.')
     } finally {
       setStarting(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [callAgent, addEntry, speak, observeOptions])
 
-  // User confirmed the proposed action — execute it, then advance.
-  const handleConfirm = useCallback(async () => {
-    if (!sessionId || proposed.length === 0) return
-    const action = proposed[0]
-    setBusy(true)
-    setError(null)
-    try {
-      addEntry('action', `${t('Doing')}: ${action.translatedDescription || action.description}`)
-      await callAgent({ action: 'act', sessionId, proposedAction: action })
-      setProposed([])
-      const nextIndex = stepIndex + 1
-      setStepIndex(nextIndex)
-      await observeStep(sessionId, nextIndex)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not complete that step.')
-    } finally {
-      setBusy(false)
-    }
-  }, [sessionId, proposed, stepIndex, observeStep, addEntry, t])
+  // User picked a specific option — execute exactly that one, then re-read.
+  const handleSelect = useCallback(
+    async (action: ProposedAction) => {
+      if (!sessionId) return
+      setBusy(true)
+      setError(null)
+      try {
+        addEntry('action', `${t('Doing')}: ${action.translatedDescription || action.description}`)
+        const data = await callAgent({ action: 'act', sessionId, proposedAction: action })
+        if (data.liveViewUrl) setLiveViewUrl(data.liveViewUrl)
+        setProposed([])
+        await observeOptions(sessionId, { cookie: false })
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not complete that step.')
+      } finally {
+        setBusy(false)
+      }
+    },
+    [sessionId, callAgent, addEntry, observeOptions, t],
+  )
 
-  // User rejected the proposed action — skip to the next step without clicking.
-  const handleReject = useCallback(async () => {
+  // Re-scan the page for options (e.g. after the user clicks directly in the live view).
+  const handleRefresh = useCallback(async () => {
     if (!sessionId) return
-    setProposed([])
-    addEntry('system', t('Okay, I will not do that. Moving on.'))
-    const nextIndex = stepIndex + 1
-    setStepIndex(nextIndex)
-    await observeStep(sessionId, nextIndex)
-  }, [sessionId, stepIndex, observeStep, addEntry, t])
+    await observeOptions(sessionId, { cookie: false })
+  }, [sessionId, observeOptions])
 
-  // Send recorded audio to Scribe, interpret the reply, and act on the intent.
+  // Voice reply: confirm/skip for a single option, or pick one of several.
   const processVoiceReply = useCallback(
     async (blob: Blob) => {
       setInterpreting(true)
@@ -202,18 +203,37 @@ export default function BookingAgentClient() {
         const base64 = btoa(
           new Uint8Array(arrayBuffer).reduce((acc, byte) => acc + String.fromCharCode(byte), ''),
         )
+
+        if (proposed.length > 1) {
+          const labels = proposed.map((a) => a.translatedDescription || a.description)
+          const result = await transcribeChoice(base64, blob.type, language, labels)
+          if ('error' in result) {
+            setError(result.error)
+            return
+          }
+          if (result.transcript) addEntry('system', `${t('You said')}: "${result.transcript}"`)
+          if (result.intent === 'select' && result.choiceIndex !== null) {
+            await handleSelect(proposed[result.choiceIndex])
+          } else if (result.intent === 'skip') {
+            await handleRefresh()
+          } else {
+            const retry = t('Sorry, I did not catch which option. Please say the option name or its number.')
+            addEntry('system', retry)
+            void speak(retry)
+          }
+          return
+        }
+
         const result = await transcribeConfirmation(base64, blob.type, language)
         if ('error' in result) {
           setError(result.error)
           return
         }
-        if (result.transcript) {
-          addEntry('system', `${t('You said')}: "${result.transcript}"`)
-        }
+        if (result.transcript) addEntry('system', `${t('You said')}: "${result.transcript}"`)
         if (result.intent === 'confirm') {
-          await handleConfirm()
+          if (proposed[0]) await handleSelect(proposed[0])
         } else if (result.intent === 'skip') {
-          await handleReject()
+          await handleRefresh()
         } else {
           const retry = t("Sorry, I didn't catch that. Please say yes to continue or no to skip.")
           addEntry('system', retry)
@@ -225,10 +245,10 @@ export default function BookingAgentClient() {
         setInterpreting(false)
       }
     },
-    [language, addEntry, t, handleConfirm, handleReject, speak],
+    [proposed, language, addEntry, t, handleSelect, handleRefresh, speak],
   )
 
-  // Toggle microphone recording for a hands-free yes/no reply.
+  // Toggle microphone recording for a hands-free reply.
   const toggleRecording = useCallback(async () => {
     if (recording) {
       mediaRecorderRef.current?.stop()
@@ -256,9 +276,7 @@ export default function BookingAgentClient() {
   }, [recording, processVoiceReply, t])
 
   const handleEnd = useCallback(async () => {
-    if (recording) {
-      mediaRecorderRef.current?.stop()
-    }
+    if (recording) mediaRecorderRef.current?.stop()
     if (sessionId) {
       try {
         await callAgent({ action: 'end', sessionId })
@@ -271,11 +289,12 @@ export default function BookingAgentClient() {
     setLiveViewUrl(null)
     setProposed([])
     setTranscript([])
-    setStepIndex(0)
-    setFinished(false)
+    setTakeover(false)
     setError(null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId])
+  }, [sessionId, recording, callAgent])
+
+  const multiple = proposed.length > 1
+  const showControls = (proposed.length > 0 || takeover) && !busy
 
   return (
     <div className="min-h-screen bg-background p-4">
@@ -296,7 +315,7 @@ export default function BookingAgentClient() {
             <h1 className="text-3xl font-bold text-balance">{t('Book a GP Appointment')}</h1>
             <p className="text-muted mt-2 leading-relaxed">
               {t(
-                'I will open the real GP booking website and guide you through it in your language. I will ask you before every action, and you can watch what I do.',
+                'I will open the real GP booking website and guide you through it in your language. You choose each option, and you can watch every step live.',
               )}
             </p>
           </div>
@@ -307,7 +326,7 @@ export default function BookingAgentClient() {
           <ShieldAlert className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" aria-hidden="true" />
           <p className="text-sm leading-relaxed">
             {t(
-              'This assistant navigates a real booking site on your behalf. Nothing is clicked without your confirmation. It will stop at the login step so you can sign in yourself.',
+              'This assistant navigates a real booking site on your behalf. Nothing is clicked without your choice. It will stop at the login step so you can sign in yourself.',
             )}
           </p>
         </div>
@@ -340,17 +359,24 @@ export default function BookingAgentClient() {
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Live browser view */}
             <div className="bg-secondary rounded-lg border border-border overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-                <Eye className="w-4 h-4 text-primary" aria-hidden="true" />
-                <span className="font-medium text-sm">{t('Live view of the booking website')}</span>
+              <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-primary" aria-hidden="true" />
+                  <span className="font-medium text-sm">{t('Live view of the booking website')}</span>
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-xs text-accent">
+                  <span className="w-2 h-2 rounded-full bg-accent animate-pulse" aria-hidden="true" />
+                  {t('Live')}
+                </span>
               </div>
               <div className="aspect-[4/3] bg-background">
                 {liveViewUrl ? (
                   <iframe
+                    key={liveViewUrl}
                     src={liveViewUrl}
                     title={t('Live view of the booking website')}
                     className="w-full h-full"
-                    sandbox="allow-same-origin allow-scripts"
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-muted text-sm">
@@ -358,6 +384,10 @@ export default function BookingAgentClient() {
                   </div>
                 )}
               </div>
+              <p className="text-xs text-muted px-4 py-2 border-t border-border leading-relaxed flex items-center gap-1.5">
+                <MousePointerClick className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+                {t('You can also click directly in this view, then press Look again.')}
+              </p>
             </div>
 
             {/* Conversation + controls */}
@@ -366,7 +396,7 @@ export default function BookingAgentClient() {
                 {t('What the assistant is doing')}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[420px]">
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[360px]">
                 {transcript.map((entry) => (
                   <div
                     key={entry.id}
@@ -390,40 +420,45 @@ export default function BookingAgentClient() {
                 <div ref={transcriptEndRef} />
               </div>
 
-              {/* Confirmation controls */}
+              {/* Selection controls */}
               <div className="border-t border-border p-4 space-y-3">
-                {proposed.length > 0 && !busy && (
+                {showControls && proposed.length > 0 && (
                   <>
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium leading-relaxed">
-                        {proposed[0].translatedDescription || proposed[0].description}
-                      </p>
-                      <button
-                        onClick={() => speak(proposed[0].translatedDescription || proposed[0].description)}
-                        className="text-primary hover:text-primary/80 flex-shrink-0"
-                        aria-label={t('Listen')}
-                      >
-                        <Volume2 className="w-4 h-4" aria-hidden="true" />
-                      </button>
+                    <p className="text-sm font-medium">
+                      {multiple ? t('Choose an option:') : t('Confirm this step:')}
+                    </p>
+
+                    {/* Each real option from the page becomes its own button */}
+                    <div className="space-y-2">
+                      {proposed.map((action, i) => (
+                        <div key={`${action.selector}-${i}`} className="flex items-stretch gap-2">
+                          <button
+                            onClick={() => handleSelect(action)}
+                            disabled={interpreting || recording}
+                            className="flex-1 inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-left text-sm font-medium transition-colors hover:border-primary hover:bg-primary/5 disabled:opacity-60"
+                          >
+                            {multiple ? (
+                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold flex-shrink-0">
+                                {i + 1}
+                              </span>
+                            ) : (
+                              <Check className="w-4 h-4 text-accent flex-shrink-0" aria-hidden="true" />
+                            )}
+                            <span className="leading-relaxed">
+                              {action.translatedDescription || action.description}
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => speak(action.translatedDescription || action.description)}
+                            className="px-3 rounded-lg border border-border bg-background text-primary hover:bg-primary/5 flex-shrink-0"
+                            aria-label={t('Listen')}
+                          >
+                            <Volume2 className="w-4 h-4" aria-hidden="true" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={handleConfirm}
-                        disabled={interpreting || recording}
-                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 font-semibold text-accent-foreground transition-colors hover:bg-accent/90 disabled:opacity-60"
-                      >
-                        <Check className="w-4 h-4" aria-hidden="true" />
-                        {t('Yes, continue')}
-                      </button>
-                      <button
-                        onClick={handleReject}
-                        disabled={interpreting || recording}
-                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 font-semibold transition-colors hover:bg-secondary disabled:opacity-60"
-                      >
-                        <X className="w-4 h-4" aria-hidden="true" />
-                        {t('No, skip')}
-                      </button>
-                    </div>
+
                     {/* Hands-free voice reply */}
                     <button
                       onClick={toggleRecording}
@@ -453,17 +488,31 @@ export default function BookingAgentClient() {
                       )}
                     </button>
                     <p className="text-xs text-muted text-center leading-relaxed">
-                      {t('Tap the microphone and say yes or no in your language.')}
+                      {multiple
+                        ? t('Tap the microphone and say the option name or its number in your language.')
+                        : t('Tap the microphone and say yes or no in your language.')}
                     </p>
                   </>
                 )}
 
-                {finished && (
+                {showControls && takeover && (
                   <div className="bg-accent/10 border border-accent/30 rounded-lg p-3 text-sm leading-relaxed">
                     {t(
-                      'You have reached the login step. Please sign in on the live view to choose your time and confirm the booking.',
+                      'You have reached the login or date step. Please sign in and pick your time in the live view above to finish booking.',
                     )}
                   </div>
+                )}
+
+                {/* Re-scan the page after navigating or clicking directly */}
+                {!busy && (
+                  <button
+                    onClick={handleRefresh}
+                    disabled={interpreting || recording}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-60"
+                  >
+                    <RefreshCw className="w-4 h-4" aria-hidden="true" />
+                    {t('Look again')}
+                  </button>
                 )}
 
                 <button

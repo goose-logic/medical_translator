@@ -68,14 +68,17 @@ export async function POST(request: Request) {
         if (!body.sessionId || !body.instruction) {
           return NextResponse.json({ error: 'Missing sessionId or instruction' }, { status: 400 })
         }
-        const { actions, pageTitle } = await observeStep(body.sessionId, body.instruction)
+        const { actions, pageTitle, liveViewUrl } = await observeStep(
+          body.sessionId,
+          body.instruction,
+        )
         const descriptions = actions.map((a) => a.description)
         const translated = await translateMany(descriptions, language)
         const actionsOut = actions.map((a, i) => ({
           ...a,
           translatedDescription: translated[i],
         }))
-        return NextResponse.json({ actions: actionsOut, pageTitle })
+        return NextResponse.json({ actions: actionsOut, pageTitle, liveViewUrl })
       }
 
       case 'act': {

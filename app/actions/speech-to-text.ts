@@ -69,6 +69,85 @@ export async function transcribeConfirmation(
   }
 }
 
+/**
+ * Transcribes a spoken reply and maps it to ONE of the options currently shown
+ * to the user (by name, description, or spoken number), or to skip / unclear.
+ */
+export async function transcribeChoice(
+  audioBase64: string,
+  mimeType: string,
+  language: LanguageCode,
+  options: string[],
+): Promise<
+  { transcript: string; choiceIndex: number | null; intent: 'select' | 'skip' | 'unclear' }
+  | { error: string }
+> {
+  const apiKey = resolveElevenLabsKey()
+  if (!apiKey) {
+    return { error: 'Voice input is not configured.' }
+  }
+
+  try {
+    const audioBuffer = Buffer.from(audioBase64, 'base64')
+    const blob = new Blob([audioBuffer], { type: mimeType || 'audio/webm' })
+
+    const form = new FormData()
+    form.append('file', blob, 'reply.webm')
+    form.append('model_id', 'scribe_v1')
+    if (language && language !== 'en') {
+      form.append('language_code', language)
+    }
+
+    const res = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+      method: 'POST',
+      headers: { 'xi-api-key': apiKey },
+      body: form,
+    })
+
+    if (!res.ok) {
+      console.log('[v0] Scribe STT error:', res.status, await res.text())
+      return { error: 'Could not understand the audio. Please try again.' }
+    }
+
+    const data = (await res.json()) as { text?: string }
+    const transcript = (data.text || '').trim()
+    if (!transcript) {
+      return { transcript: '', choiceIndex: null, intent: 'unclear' }
+    }
+
+    const numbered = options.map((o, i) => `${i + 1}. ${o}`).join('\n')
+    const { text } = await generateText({
+      model: 'openai/gpt-4o-mini',
+      prompt: `The user is booking a medical appointment. They were shown these numbered options and asked to choose one. Their spoken reply is in ${SUPPORTED_LANGUAGES[language]}.
+
+Options:
+${numbered}
+
+User reply: "${transcript}"
+
+Decide which option they chose. Respond with ONLY:
+- the option number (e.g. "1", "2") if they clearly picked one, matching by meaning, name, or the number they said
+- "skip" if they want to go back / none / skip
+- "unclear" if you cannot tell
+
+Answer with only the number, "skip", or "unclear".`,
+    })
+
+    const normalized = text.trim().toLowerCase()
+    if (normalized.includes('skip')) {
+      return { transcript, choiceIndex: null, intent: 'skip' }
+    }
+    const num = Number.parseInt(normalized.replace(/[^0-9]/g, ''), 10)
+    if (!Number.isNaN(num) && num >= 1 && num <= options.length) {
+      return { transcript, choiceIndex: num - 1, intent: 'select' }
+    }
+    return { transcript, choiceIndex: null, intent: 'unclear' }
+  } catch (error) {
+    console.log('[v0] transcribeChoice failed:', error)
+    return { error: 'Could not process the audio. Please try again.' }
+  }
+}
+
 async function classifyIntent(transcript: string, language: LanguageCode): Promise<VoiceIntent> {
   try {
     const { text } = await generateText({
