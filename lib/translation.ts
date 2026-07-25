@@ -5,7 +5,7 @@ import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
 
 // The AI SDK routes through the Vercel AI Gateway by default, so we can pass a
 // model string directly without installing a provider package.
-const TRANSLATION_MODEL = 'google/gemini-3.5-flash'
+const TRANSLATION_MODEL = 'openai/gpt-4o-mini'
 
 export async function translateText(
   text: string,
