@@ -35,16 +35,16 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // 1 day
   },
-  ...(process.env.NODE_ENV === 'development'
-    ? {
-        advanced: {
-          // In dev (v0 preview iframe), force cross-site cookies so the
-          // session cookie is stored by the browser.
-          defaultCookieAttributes: {
-            sameSite: 'none' as const,
-            secure: true,
-          },
-        },
-      }
-    : {}),
+  advanced: {
+    // The app is viewed inside an iframe in both the v0 dev preview AND the
+    // deployed preview. A SameSite=Lax cookie is blocked by browsers in a
+    // cross-site iframe, so the session token never persists and login appears
+    // to "not work" (200 response, but immediately bounced back to sign-in).
+    // SameSite=None + Secure lets the session cookie be stored/sent inside the
+    // iframe. This applies in production too, not just development.
+    defaultCookieAttributes: {
+      sameSite: 'none' as const,
+      secure: true,
+    },
+  },
 })
