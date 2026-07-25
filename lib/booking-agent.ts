@@ -32,18 +32,29 @@ globalForAgent.__bookingSessions = sessions
 
 const SESSION_TTL_MS = 10 * 60 * 1000 // 10 minutes
 
-/** Resolve whichever BROWSERBASE_API_KEY* env var holds a valid bb_-prefixed key. */
+/**
+ * Resolve the Browserbase API key from any env var named BROWSERBASE_API_KEY*
+ * (e.g. BROWSERBASE_API_KEY, BROWSERBASE_API_KEY_2). Env-sync sometimes lands
+ * the real key in a suffixed var, so we don't rely on one exact name. A
+ * bb_-prefixed value is preferred, but any non-empty value under that prefix
+ * is accepted as a fallback so a renamed key still works.
+ */
 function resolveBrowserbaseKey(): string {
-  for (const [k, v] of Object.entries(process.env)) {
-    if (/^BROWSERBASE_API_KEY/.test(k) && typeof v === 'string' && v.startsWith('bb_')) {
-      return v
-    }
+  const candidates = Object.entries(process.env).filter(
+    ([k, v]) => /^BROWSERBASE_API_KEY/.test(k) && typeof v === 'string' && v.trim().length > 0,
+  ) as [string, string][]
+
+  // Prefer a value in the expected bb_ format, else take the first non-empty one.
+  const preferred = candidates.find(([, v]) => v.startsWith('bb_'))
+  const chosen = preferred ?? candidates[0]
+
+  if (!chosen) {
+    throw new Error(
+      'Browserbase API key is not configured. Set BROWSERBASE_API_KEY (or a ' +
+        'BROWSERBASE_API_KEY_* variable) to your bb_-prefixed key.',
+    )
   }
-  const fallback = process.env.BROWSERBASE_API_KEY
-  if (!fallback) {
-    throw new Error('BROWSERBASE_API_KEY is not configured.')
-  }
-  return fallback
+  return chosen[1]
 }
 
 function modelConfig() {
