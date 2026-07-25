@@ -1,12 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X } from 'lucide-react'
+import Link from 'next/link'
+import { X, ArrowLeft, FileText } from 'lucide-react'
 import {
   getMedicalRecords,
   uploadMedicalRecord,
   translateMedicalRecord,
   getMedicalRecordDetails,
+  loadSampleDocument,
 } from '@/app/actions/medical-records'
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
 import type { medicalRecords } from '@/lib/db/schema'
@@ -22,10 +24,23 @@ export default function DocumentsClient() {
   const [translatedContent, setTranslatedContent] = useState<string | null>(null)
   const [translationLoading, setTranslationLoading] = useState(false)
   const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>('en')
+  const [loadingSample, setLoadingSample] = useState(false)
 
   useEffect(() => {
     loadRecords()
   }, [])
+
+  const handleLoadSample = async () => {
+    try {
+      setLoadingSample(true)
+      await loadSampleDocument()
+      await loadRecords()
+    } catch (error) {
+      console.error('[v0] Error loading sample document:', error)
+    } finally {
+      setLoadingSample(false)
+    }
+  }
 
   const loadRecords = async () => {
     try {
@@ -64,7 +79,9 @@ export default function DocumentsClient() {
   const handleTranslate = async (recordId: string, language: LanguageCode) => {
     try {
       setTranslationLoading(true)
+      const record = records.find((r) => r.id === recordId) ?? null
       const result = await translateMedicalRecord(recordId, language)
+      setSelectedRecord(record)
       setTranslatedContent(result.translatedContent)
       setSelectedLanguage(language)
     } catch (error) {
@@ -82,6 +99,14 @@ export default function DocumentsClient() {
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-6xl mx-auto">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-primary hover:underline font-medium mb-6"
+        >
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+          Back to Dashboard
+        </Link>
+
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Medical Documents</h1>
           <p className="text-muted">Upload and translate your medical letters, prescriptions, and documents</p>
@@ -120,6 +145,24 @@ export default function DocumentsClient() {
               </div>
             </label>
           </div>
+
+          <div className="mt-4 flex items-center gap-3">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-xs text-muted">or</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+
+          <button
+            onClick={handleLoadSample}
+            disabled={loadingSample}
+            className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-60"
+          >
+            <FileText className="w-4 h-4" aria-hidden="true" />
+            {loadingSample ? 'Loading sample...' : 'Try a sample NHS letter'}
+          </button>
+          <p className="mt-2 text-center text-xs text-muted">
+            Adds an example cardiology appointment letter so you can try translation.
+          </p>
         </div>
 
         {/* Documents Grid */}

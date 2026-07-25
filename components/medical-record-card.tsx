@@ -40,7 +40,6 @@ export default function MedicalRecordCard({
     setTranslating(true)
     try {
       await onTranslate(record.id, language)
-      onSelect(record)
     } finally {
       setTranslating(false)
       setShowLanguageMenu(false)

@@ -138,6 +138,79 @@ export async function translateMedicalRecord(recordId: string, targetLanguage: L
   }
 }
 
+const SAMPLE_LETTER = `NHS Cardiology Department
+St Thomas' Hospital
+Westminster Bridge Road
+London SE1 7EH
+
+Date: 12 March 2026
+NHS Number: 123 456 7890
+
+Dear Mr Patient,
+
+Re: Outpatient Cardiology Appointment
+
+Following your recent visit to your GP, you have been referred to our Cardiology Department for further assessment of your heart health.
+
+We would like to invite you to an outpatient appointment:
+
+  Date: Tuesday, 7 April 2026
+  Time: 10:30 AM
+  Location: Cardiology Outpatients, 2nd Floor, East Wing
+  Clinician: Dr. Sarah Bennett, Consultant Cardiologist
+
+WHAT TO BRING:
+- A list of any medications you are currently taking
+- Your reading glasses if you use them
+- This letter
+
+WHAT TO EXPECT:
+During this appointment you will have an electrocardiogram (ECG), which records the electrical activity of your heart. This is a painless test that takes about 10 minutes. The doctor will then discuss your symptoms and may arrange further tests.
+
+Please arrive 15 minutes before your appointment time to complete registration. If you need an interpreter, please call the number below at least 5 working days before your appointment and we will arrange one free of charge.
+
+If you are unable to attend, please telephone 020 7188 XXXX as soon as possible so we can offer the appointment to another patient.
+
+Yours sincerely,
+
+Cardiology Appointments Team
+St Thomas' Hospital`
+
+export async function loadSampleDocument() {
+  const userId = await getUserId()
+
+  // Avoid creating duplicate samples for the same user
+  const existing = await db
+    .select()
+    .from(medicalRecords)
+    .where(and(eq(medicalRecords.userId, userId), eq(medicalRecords.title, 'Sample: Cardiology Appointment Letter')))
+
+  if (existing.length > 0) {
+    return { recordId: existing[0].id, success: true, alreadyExists: true }
+  }
+
+  const recordId = uuidv4()
+
+  await db.insert(medicalRecords).values({
+    id: recordId,
+    userId,
+    title: 'Sample: Cardiology Appointment Letter',
+    type: 'letter',
+    originalContent: SAMPLE_LETTER,
+    language: 'en',
+  })
+
+  await db.insert(auditLog).values({
+    id: uuidv4(),
+    userId,
+    action: 'sample_record_loaded',
+    recordId,
+    metadata: { recordType: 'letter' },
+  })
+
+  return { recordId, success: true, alreadyExists: false }
+}
+
 export async function getMedicalRecordDetails(recordId: string) {
   const userId = await getUserId()
 

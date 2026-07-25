@@ -17,6 +17,14 @@ export default function PlaceholderFeature({
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-4xl mx-auto">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-primary hover:underline font-medium mb-6"
+        >
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+          Back to Dashboard
+        </Link>
+
         {/* Header */}
         <div className="mb-8 flex items-start gap-4">
           <span className="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-primary/10 text-primary flex-shrink-0">
