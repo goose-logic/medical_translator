@@ -7,7 +7,7 @@ import { db } from '@/lib/db'
 import { translationCache } from '@/lib/db/schema'
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
 
-const TRANSLATION_MODEL = 'google/gemini-2.0-flash'
+const TRANSLATION_MODEL = 'google/gemini-3.5-flash'
 
 /**
  * Translate an array of short UI strings into the target language.
