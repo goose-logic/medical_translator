@@ -1,24 +1,11 @@
 'use server'
 
 import { generateText } from 'ai'
+import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
 
 // The AI SDK routes through the Vercel AI Gateway by default, so we can pass a
 // model string directly without installing a provider package.
 const TRANSLATION_MODEL = 'openai/gpt-4o'
-
-export const SUPPORTED_LANGUAGES = {
-  en: 'English',
-  pl: 'Polish',
-  ur: 'Urdu',
-  pa: 'Punjabi',
-  zh: 'Simplified Chinese',
-  zh_mandharin: 'Mandarin Chinese',
-  ar: 'Arabic',
-  bn: 'Bengali',
-  so: 'Somali',
-}
-
-export type LanguageCode = keyof typeof SUPPORTED_LANGUAGES
 
 export async function translateText(
   text: string,

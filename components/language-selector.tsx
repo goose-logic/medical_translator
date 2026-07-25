@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/translation'
+import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
 
 interface LanguageSelectorProps {
   selectedLanguage: LanguageCode

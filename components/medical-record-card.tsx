@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/translation'
+import { Pill, FileText, ClipboardList, File, type LucideIcon } from 'lucide-react'
+import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
 import type { medicalRecords } from '@/lib/db/schema'
 
 type MedicalRecord = typeof medicalRecords.$inferSelect
@@ -22,16 +23,16 @@ export default function MedicalRecordCard({
   const [showLanguageMenu, setShowLanguageMenu] = useState(false)
   const [translating, setTranslating] = useState(false)
 
-  const getRecordTypeIcon = (type: string) => {
+  const getRecordTypeIcon = (type: string): LucideIcon => {
     switch (type) {
       case 'prescription':
-        return '💊'
+        return Pill
       case 'letter':
-        return '📄'
+        return FileText
       case 'summary':
-        return '📋'
+        return ClipboardList
       default:
-        return '📑'
+        return File
     }
   }
 
@@ -46,6 +47,8 @@ export default function MedicalRecordCard({
     }
   }
 
+  const TypeIcon = getRecordTypeIcon(record.type)
+
   return (
     <div
       className={`p-4 border rounded-lg transition-all cursor-pointer ${
@@ -55,7 +58,10 @@ export default function MedicalRecordCard({
     >
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-4 flex-1">
-          <div className="text-3xl">{getRecordTypeIcon(record.type)}</div>
+          <TypeIcon
+            className={`w-7 h-7 flex-shrink-0 ${isSelected ? 'text-white' : 'text-primary'}`}
+            aria-hidden="true"
+          />
           <div className="flex-1 min-w-0">
             <h3 className={`font-semibold truncate ${isSelected ? 'text-white' : 'text-foreground'}`}>
               {record.title}

@@ -6,7 +6,7 @@ import { userPreferences, auditLog } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { v4 as uuidv4 } from 'uuid'
-import type { LanguageCode } from '@/lib/translation'
+import type { LanguageCode } from '@/lib/languages'
 
 async function getUserId() {
   const session = await auth.api.getSession({ headers: await headers() })

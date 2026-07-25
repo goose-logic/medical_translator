@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import type { User } from 'better-auth'
-import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/translation'
+import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
 import { updateUserLanguage, getUserPreferences } from '@/app/actions/user'
 import LanguageSelector from './language-selector'
 import NavigationMenu from './navigation-menu'

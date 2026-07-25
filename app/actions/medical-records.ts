@@ -6,7 +6,8 @@ import { medicalRecords, auditLog, translationCache } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { v4 as uuidv4 } from 'uuid'
-import { translateText, type LanguageCode } from '@/lib/translation'
+import { translateText } from '@/lib/translation'
+import type { LanguageCode } from '@/lib/languages'
 
 async function getUserId() {
   const session = await auth.api.getSession({ headers: await headers() })

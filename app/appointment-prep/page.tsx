@@ -1,4 +1,5 @@
 import PlaceholderFeature from '@/components/placeholder-feature'
+import { Hospital } from 'lucide-react'
 
 export default function AppointmentPrepPage() {
   return (
@@ -11,7 +12,7 @@ export default function AppointmentPrepPage() {
         'Understand what documents to bring',
         'Prepare in your preferred language',
       ]}
-      icon="🏥"
+      icon={Hospital}
     />
   )
 }

@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { X } from 'lucide-react'
 import {
   getMedicalRecords,
   uploadMedicalRecord,
   translateMedicalRecord,
   getMedicalRecordDetails,
 } from '@/app/actions/medical-records'
-import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/translation'
+import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
 import type { medicalRecords } from '@/lib/db/schema'
 import MedicalRecordCard from './medical-record-card'
 
@@ -160,8 +161,9 @@ export default function DocumentsClient() {
                       setTranslatedContent(null)
                     }}
                     className="text-muted hover:text-foreground"
+                    aria-label="Close translation"
                   >
-                    ✕
+                    <X className="w-5 h-5" aria-hidden="true" />
                   </button>
                 </div>
 

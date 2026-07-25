@@ -1,4 +1,5 @@
 import PlaceholderFeature from '@/components/placeholder-feature'
+import { Pill } from 'lucide-react'
 
 export default function PrescriptionsPage() {
   return (
@@ -11,7 +12,7 @@ export default function PrescriptionsPage() {
         'Learn about potential side effects',
         'Get reminders for taking medications',
       ]}
-      icon="💊"
+      icon={Pill}
     />
   )
 }

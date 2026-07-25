@@ -1,4 +1,5 @@
 import PlaceholderFeature from '@/components/placeholder-feature'
+import { Calendar } from 'lucide-react'
 
 export default function AppointmentsPage() {
   return (
@@ -11,7 +12,7 @@ export default function AppointmentsPage() {
         'Reschedule or cancel appointments',
         'Receive appointments in your preferred language',
       ]}
-      icon="📅"
+      icon={Calendar}
     />
   )
 }

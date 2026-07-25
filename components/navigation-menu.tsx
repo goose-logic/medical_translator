@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import type { LanguageCode } from '@/lib/translation'
+import { FileText, Pill, Calendar, Hospital, MapPin, type LucideIcon } from 'lucide-react'
+import type { LanguageCode } from '@/lib/languages'
 
 interface NavigationMenuProps {
   selectedLanguage: LanguageCode
@@ -11,35 +12,40 @@ interface NavigationMenuProps {
 export default function NavigationMenu({ selectedLanguage }: NavigationMenuProps) {
   const pathname = usePathname()
 
-  const menuItems = [
+  const menuItems: {
+    href: string
+    label: string
+    icon: LucideIcon
+    description: string
+  }[] = [
     {
       href: '/documents',
       label: 'Medical Documents',
-      icon: '📄',
+      icon: FileText,
       description: 'Read and understand medical letters and documents',
     },
     {
       href: '/prescriptions',
       label: 'Prescriptions',
-      icon: '💊',
+      icon: Pill,
       description: 'Understand your medications and instructions',
     },
     {
       href: '/appointments',
       label: 'Appointments',
-      icon: '📅',
+      icon: Calendar,
       description: 'Book, manage, and prepare for appointments',
     },
     {
       href: '/appointment-prep',
       label: 'Clinic Preparation',
-      icon: '🏥',
+      icon: Hospital,
       description: 'Get help preparing for your clinic visit',
     },
     {
       href: '/navigation',
       label: 'Healthcare Facilities',
-      icon: '🗺️',
+      icon: MapPin,
       description: 'Find and navigate to NHS facilities',
     },
   ]
@@ -49,6 +55,7 @@ export default function NavigationMenu({ selectedLanguage }: NavigationMenuProps
       <div className="space-y-3">
         {menuItems.map((item) => {
           const isActive = pathname === item.href
+          const Icon = item.icon
           return (
             <Link
               key={item.href}
@@ -60,7 +67,10 @@ export default function NavigationMenu({ selectedLanguage }: NavigationMenuProps
               }`}
             >
               <div className="flex items-start gap-3">
-                <span className="text-xl">{item.icon}</span>
+                <Icon
+                  className={`w-5 h-5 mt-0.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-primary'}`}
+                  aria-hidden="true"
+                />
                 <div>
                   <h3 className={`font-semibold ${isActive ? 'text-white' : 'text-foreground'}`}>
                     {item.label}

@@ -1,4 +1,5 @@
 import PlaceholderFeature from '@/components/placeholder-feature'
+import { MapPin } from 'lucide-react'
 
 export default function NavigationPage() {
   return (
@@ -11,7 +12,7 @@ export default function NavigationPage() {
         'View clinic opening hours',
         'Get public transport directions',
       ]}
-      icon="🗺️"
+      icon={MapPin}
     />
   )
 }
