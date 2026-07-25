@@ -1,3 +1,5 @@
+'use client'
+
 import PlaceholderFeature from '@/components/placeholder-feature'
 import { Pill } from 'lucide-react'
 
