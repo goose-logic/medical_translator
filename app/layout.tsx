@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import VoiceAssistant from '@/components/voice-assistant'
 import { I18nProvider } from '@/components/i18n-provider'
@@ -6,12 +6,14 @@ import { I18nProvider } from '@/components/i18n-provider'
 export const metadata: Metadata = {
   title: 'Medical Navigator - NHS Healthcare Support',
   description: 'Navigate the NHS healthcare system in your own language. Medical translation, appointment booking, and guidance.',
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 5,
-    userScalable: true,
-  },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  themeColor: '#0066cc',
 }
 
 export default function RootLayout({
