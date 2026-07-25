@@ -12,8 +12,19 @@ import {
 import { type LanguageCode, isRTL } from '@/lib/languages'
 import { translateUIStrings } from '@/app/actions/translate-ui'
 import { updateUserLanguage, getUserPreferences } from '@/app/actions/user'
+import staticTranslations from '@/lib/static-translations.json'
 
 type Dict = Record<string, string>
+
+// Pre-generated translations for the fixed UI strings. Seeding the dictionary
+// from these means the UI chrome renders instantly in supported languages with
+// zero runtime translation calls. Anything not present here (e.g. dynamic
+// document content) still falls back to the cached/API translation path.
+const STATIC_TRANSLATIONS = staticTranslations as Partial<Record<LanguageCode, Dict>>
+
+function staticDictFor(lang: LanguageCode): Dict {
+  return STATIC_TRANSLATIONS[lang] ?? {}
+}
 
 interface I18nContextValue {
   language: LanguageCode
@@ -57,7 +68,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       if (stored) {
         restored = stored
         const cachedDict = localStorage.getItem(dictStorageKey(stored))
-        if (cachedDict) setDict(JSON.parse(cachedDict))
+        // Cached (dynamic) strings first, then authoritative static
+        // translations on top so correct hardcoded copy always wins.
+        setDict({ ...(cachedDict ? JSON.parse(cachedDict) : {}), ...staticDictFor(stored) })
       }
     } catch {
       // ignore malformed storage
@@ -93,7 +106,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       requestedRef.current = new Set()
       missingRef.current = new Set()
 
-      // Load any cached dictionary for the new language immediately.
+      // Load static translations immediately, then layer any cached (dynamic)
+      // strings on top so the UI paints in the new language with no delay.
       let cached: Dict = {}
       try {
         localStorage.setItem(STORAGE_LANG_KEY, lang)
@@ -102,7 +116,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       } catch {
         // ignore
       }
-      setDict(cached)
+      setDict({ ...cached, ...staticDictFor(lang) })
 
       if (opts.persistToDb) {
         updateUserLanguage(lang).catch((error) =>
