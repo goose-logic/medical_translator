@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
-import VoiceAssistant from '@/components/voice-assistant'
 import { I18nProvider } from '@/components/i18n-provider'
 
 export const metadata: Metadata = {
@@ -32,7 +31,6 @@ export default function RootLayout({
       <body className="text-foreground">
         <I18nProvider>
           {children}
-          <VoiceAssistant />
         </I18nProvider>
       </body>
     </html>
