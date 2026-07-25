@@ -20,6 +20,16 @@ export const auth = betterAuth({
     ...(process.env.VERCEL_PROJECT_PRODUCTION_URL
       ? [`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`]
       : []),
+    ...(process.env.NODE_ENV === 'development'
+      ? [
+          'http://localhost:3000',
+          'http://localhost:3001',
+          // v0 preview is served through sandbox proxy domains whose origin
+          // differs from V0_RUNTIME_URL, so trust those wildcard domains.
+          'https://*.vercel.run',
+          'https://*.vusercontent.net',
+        ]
+      : []),
   ],
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
