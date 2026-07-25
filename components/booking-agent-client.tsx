@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import Link from 'next/link'
 import {
-  ArrowLeft,
   Calendar,
   Check,
   X,
@@ -20,6 +18,7 @@ import {
 import { useI18n } from '@/components/i18n-provider'
 import { synthesizeSpeech } from '@/app/actions/text-to-speech'
 import { transcribeConfirmation, transcribeChoice } from '@/app/actions/speech-to-text'
+import AppHeader from '@/components/app-header'
 
 type ProposedAction = {
   description: string
@@ -297,16 +296,9 @@ export default function BookingAgentClient() {
   const showControls = (proposed.length > 0 || takeover) && !busy
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-6xl mx-auto">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-primary hover:underline font-medium mb-6"
-        >
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          {t('Back to Dashboard')}
-        </Link>
-
+    <div className="min-h-screen bg-background">
+      <AppHeader />
+      <div className="max-w-6xl mx-auto p-4 pt-6">
         <div className="mb-6 flex items-start gap-4">
           <span className="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-primary/10 text-primary flex-shrink-0">
             <Calendar className="w-7 h-7" aria-hidden="true" />

@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import Link from 'next/link'
-import { X, ArrowLeft, FileText, Volume2, Loader2 } from 'lucide-react'
+import { X, FileText, Volume2, Loader2 } from 'lucide-react'
 import {
   getMedicalRecords,
   uploadMedicalRecord,
@@ -15,6 +14,7 @@ import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
 import type { medicalRecords } from '@/lib/db/schema'
 import MedicalRecordCard from './medical-record-card'
 import { useI18n } from '@/components/i18n-provider'
+import AppHeader from '@/components/app-header'
 
 type MedicalRecord = typeof medicalRecords.$inferSelect
 
@@ -147,16 +147,9 @@ export default function DocumentsClient() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-6xl mx-auto">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-primary hover:underline font-medium mb-6"
-        >
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          {t('Back to Dashboard')}
-        </Link>
-
+    <div className="min-h-screen bg-background">
+      <AppHeader />
+      <div className="max-w-6xl mx-auto p-4 pt-6">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">{t('Medical Documents')}</h1>
           <p className="text-muted">
