@@ -12,9 +12,12 @@ import {
   Eye,
   ShieldAlert,
   Volume2,
+  Mic,
+  Square,
 } from 'lucide-react'
 import { useI18n } from '@/components/i18n-provider'
 import { synthesizeSpeech } from '@/app/actions/text-to-speech'
+import { transcribeConfirmation } from '@/app/actions/speech-to-text'
 
 type ProposedAction = {
   description: string
@@ -58,8 +61,12 @@ export default function BookingAgentClient() {
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
   const [error, setError] = useState<string | null>(null)
   const [finished, setFinished] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const [interpreting, setInterpreting] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
 
   const addEntry = useCallback((kind: TranscriptEntry['kind'], text: string) => {
     setTranscript((prev) => [...prev, { id: crypto.randomUUID(), kind, text }])
@@ -185,7 +192,73 @@ export default function BookingAgentClient() {
     await observeStep(sessionId, nextIndex)
   }, [sessionId, stepIndex, observeStep, addEntry, t])
 
+  // Send recorded audio to Scribe, interpret the reply, and act on the intent.
+  const processVoiceReply = useCallback(
+    async (blob: Blob) => {
+      setInterpreting(true)
+      setError(null)
+      try {
+        const arrayBuffer = await blob.arrayBuffer()
+        const base64 = btoa(
+          new Uint8Array(arrayBuffer).reduce((acc, byte) => acc + String.fromCharCode(byte), ''),
+        )
+        const result = await transcribeConfirmation(base64, blob.type, language)
+        if ('error' in result) {
+          setError(result.error)
+          return
+        }
+        if (result.transcript) {
+          addEntry('system', `${t('You said')}: "${result.transcript}"`)
+        }
+        if (result.intent === 'confirm') {
+          await handleConfirm()
+        } else if (result.intent === 'skip') {
+          await handleReject()
+        } else {
+          const retry = t("Sorry, I didn't catch that. Please say yes to continue or no to skip.")
+          addEntry('system', retry)
+          void speak(retry)
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not process your reply.')
+      } finally {
+        setInterpreting(false)
+      }
+    },
+    [language, addEntry, t, handleConfirm, handleReject, speak],
+  )
+
+  // Toggle microphone recording for a hands-free yes/no reply.
+  const toggleRecording = useCallback(async () => {
+    if (recording) {
+      mediaRecorderRef.current?.stop()
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      chunksRef.current = []
+      const recorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = recorder
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
+      }
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop())
+        setRecording(false)
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+        if (blob.size > 0) void processVoiceReply(blob)
+      }
+      recorder.start()
+      setRecording(true)
+    } catch {
+      setError(t('Microphone access was denied. You can use the buttons instead.'))
+    }
+  }, [recording, processVoiceReply, t])
+
   const handleEnd = useCallback(async () => {
+    if (recording) {
+      mediaRecorderRef.current?.stop()
+    }
     if (sessionId) {
       try {
         await callAgent({ action: 'end', sessionId })
@@ -336,19 +409,52 @@ export default function BookingAgentClient() {
                     <div className="flex gap-3">
                       <button
                         onClick={handleConfirm}
-                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 font-semibold text-accent-foreground transition-colors hover:bg-accent/90"
+                        disabled={interpreting || recording}
+                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 font-semibold text-accent-foreground transition-colors hover:bg-accent/90 disabled:opacity-60"
                       >
                         <Check className="w-4 h-4" aria-hidden="true" />
                         {t('Yes, continue')}
                       </button>
                       <button
                         onClick={handleReject}
-                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 font-semibold transition-colors hover:bg-secondary"
+                        disabled={interpreting || recording}
+                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 font-semibold transition-colors hover:bg-secondary disabled:opacity-60"
                       >
                         <X className="w-4 h-4" aria-hidden="true" />
                         {t('No, skip')}
                       </button>
                     </div>
+                    {/* Hands-free voice reply */}
+                    <button
+                      onClick={toggleRecording}
+                      disabled={interpreting}
+                      className={
+                        recording
+                          ? 'w-full inline-flex items-center justify-center gap-2 rounded-lg bg-destructive px-4 py-2.5 font-semibold text-destructive-foreground transition-colors hover:bg-destructive/90 disabled:opacity-60'
+                          : 'w-full inline-flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2.5 font-semibold text-primary transition-colors hover:bg-primary/10 disabled:opacity-60'
+                      }
+                      aria-label={recording ? t('Stop recording') : t('Answer with your voice')}
+                    >
+                      {interpreting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                          {t('Listening to your reply...')}
+                        </>
+                      ) : recording ? (
+                        <>
+                          <Square className="w-4 h-4" aria-hidden="true" />
+                          {t('Stop and send')}
+                        </>
+                      ) : (
+                        <>
+                          <Mic className="w-4 h-4" aria-hidden="true" />
+                          {t('Answer with your voice')}
+                        </>
+                      )}
+                    </button>
+                    <p className="text-xs text-muted text-center leading-relaxed">
+                      {t('Tap the microphone and say yes or no in your language.')}
+                    </p>
                   </>
                 )}
 
