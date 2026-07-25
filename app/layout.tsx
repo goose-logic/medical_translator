@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import VoiceAssistant from '@/components/voice-assistant'
 
 export const metadata: Metadata = {
   title: 'Medical Navigator - NHS Healthcare Support',
@@ -19,7 +20,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="bg-background">
-      <body className="text-foreground">{children}</body>
+      <body className="text-foreground">
+        {children}
+        <VoiceAssistant />
+      </body>
     </html>
   )
 }
