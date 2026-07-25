@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { X, ArrowLeft, FileText } from 'lucide-react'
+import { X, ArrowLeft, FileText, Volume2, Loader2 } from 'lucide-react'
 import {
   getMedicalRecords,
   uploadMedicalRecord,
@@ -10,6 +10,7 @@ import {
   getMedicalRecordDetails,
   loadSampleDocument,
 } from '@/app/actions/medical-records'
+import { synthesizeSpeech } from '@/app/actions/text-to-speech'
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
 import type { medicalRecords } from '@/lib/db/schema'
 import MedicalRecordCard from './medical-record-card'
@@ -27,10 +28,57 @@ export default function DocumentsClient() {
   const [translationLoading, setTranslationLoading] = useState(false)
   const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>('en')
   const [loadingSample, setLoadingSample] = useState(false)
+  const [audioLoading, setAudioLoading] = useState(false)
+  const [audioError, setAudioError] = useState<string | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     loadRecords()
   }, [])
+
+  // Stop and clean up any playing audio when the modal closes or content changes.
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
+    setIsPlaying(false)
+  }
+
+  const handleListen = async () => {
+    if (!translatedContent) return
+
+    // If audio is already playing, treat the button as a stop control.
+    if (isPlaying) {
+      stopAudio()
+      return
+    }
+
+    try {
+      setAudioError(null)
+      setAudioLoading(true)
+      const result = await synthesizeSpeech(translatedContent)
+      if ('error' in result) {
+        setAudioError(result.error)
+        return
+      }
+      const audio = new Audio(result.audioDataUrl)
+      audioRef.current = audio
+      audio.onended = () => setIsPlaying(false)
+      audio.onerror = () => {
+        setAudioError(t('Unable to play audio right now. Please try again.'))
+        setIsPlaying(false)
+      }
+      await audio.play()
+      setIsPlaying(true)
+    } catch (error) {
+      console.error('[v0] Listen error:', error)
+      setAudioError(t('Unable to play audio right now. Please try again.'))
+    } finally {
+      setAudioLoading(false)
+    }
+  }
 
   const handleLoadSample = async () => {
     try {
@@ -206,6 +254,8 @@ export default function DocumentsClient() {
                   <h3 className="text-lg font-semibold">{t('Translation')}</h3>
                   <button
                     onClick={() => {
+                      stopAudio()
+                      setAudioError(null)
                       setSelectedRecord(null)
                       setTranslatedContent(null)
                     }}
@@ -214,6 +264,31 @@ export default function DocumentsClient() {
                   >
                     <X className="w-5 h-5" aria-hidden="true" />
                   </button>
+                </div>
+
+                <div className="mb-4">
+                  <button
+                    onClick={handleListen}
+                    disabled={audioLoading}
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+                    aria-label={isPlaying ? t('Stop audio') : t('Listen to translation')}
+                  >
+                    {audioLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Volume2 className="w-4 h-4" aria-hidden="true" />
+                    )}
+                    {audioLoading
+                      ? t('Preparing audio...')
+                      : isPlaying
+                        ? t('Stop')
+                        : t('Listen')}
+                  </button>
+                  {audioError && (
+                    <p className="mt-2 text-sm text-destructive" role="alert">
+                      {audioError}
+                    </p>
+                  )}
                 </div>
 
                 <div className="bg-secondary p-4 rounded-lg border border-border">
