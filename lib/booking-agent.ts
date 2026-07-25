@@ -123,6 +123,16 @@ export async function startBookingSession(): Promise<StartResult> {
     disableAPI: true,
     model: modelConfig(),
     verbose: 0,
+    // Providing an external logger makes Stagehand use it INSTEAD of pino
+    // (usePino = !externalProvided). This prevents pino from loading its
+    // `pino-pretty` transport, which crashes in bundled/serverless builds with
+    // "unable to determine transport target for pino-pretty". We forward only
+    // errors to the console to keep logs quiet.
+    logger: (line) => {
+      if (line?.level === 0) {
+        console.log('[v0] stagehand:', line.message)
+      }
+    },
   })
 
   await stagehand.init()
