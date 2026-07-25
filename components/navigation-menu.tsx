@@ -3,14 +3,11 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { FileText, Pill, Calendar, Hospital, MapPin, type LucideIcon } from 'lucide-react'
-import type { LanguageCode } from '@/lib/languages'
+import { useI18n } from '@/components/i18n-provider'
 
-interface NavigationMenuProps {
-  selectedLanguage: LanguageCode
-}
-
-export default function NavigationMenu({ selectedLanguage }: NavigationMenuProps) {
+export default function NavigationMenu() {
   const pathname = usePathname()
+  const { t } = useI18n()
 
   const menuItems: {
     href: string
@@ -73,10 +70,10 @@ export default function NavigationMenu({ selectedLanguage }: NavigationMenuProps
                 />
                 <div>
                   <h3 className={`font-semibold ${isActive ? 'text-white' : 'text-foreground'}`}>
-                    {item.label}
+                    {t(item.label)}
                   </h3>
                   <p className={`text-xs mt-1 ${isActive ? 'text-blue-100' : 'text-muted'}`}>
-                    {item.description}
+                    {t(item.description)}
                   </p>
                 </div>
               </div>

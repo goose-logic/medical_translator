@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { Pill, FileText, ClipboardList, File, type LucideIcon } from 'lucide-react'
-import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
+import { SUPPORTED_LANGUAGES, LANGUAGE_META, type LanguageCode } from '@/lib/languages'
 import type { medicalRecords } from '@/lib/db/schema'
+import { useI18n } from '@/components/i18n-provider'
 
 type MedicalRecord = typeof medicalRecords.$inferSelect
 
@@ -20,6 +21,7 @@ export default function MedicalRecordCard({
   onSelect,
   onTranslate,
 }: MedicalRecordCardProps) {
+  const { t } = useI18n()
   const [showLanguageMenu, setShowLanguageMenu] = useState(false)
   const [translating, setTranslating] = useState(false)
 
@@ -66,7 +68,7 @@ export default function MedicalRecordCard({
               {record.title}
             </h3>
             <div className={`flex items-center gap-4 mt-2 text-sm ${isSelected ? 'text-blue-100' : 'text-muted'}`}>
-              <span className="capitalize">{record.type}</span>
+              <span className="capitalize">{t(record.type)}</span>
               <span>
                 {record.uploadedAt
                   ? new Date(record.uploadedAt).toLocaleDateString()
@@ -96,24 +98,33 @@ export default function MedicalRecordCard({
                   : 'bg-primary text-white hover:bg-blue-700'
               } ${translating ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {translating ? 'Translating...' : 'Translate'}
+              {translating ? t('Translating...') : t('Translate')}
             </button>
 
             {showLanguageMenu && !translating && (
-              <div className="absolute right-0 mt-2 w-48 bg-background border border-border rounded-lg shadow-lg z-40">
+              <div className="absolute right-0 mt-2 w-56 bg-background border border-border rounded-lg shadow-lg z-40">
                 <div className="p-2 max-h-60 overflow-y-auto">
-                  {Object.entries(SUPPORTED_LANGUAGES).map(([code, name]) => (
-                    <button
-                      key={code}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleTranslate(code as LanguageCode)
-                      }}
-                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-foreground"
-                    >
-                      {name}
-                    </button>
-                  ))}
+                  {(Object.keys(SUPPORTED_LANGUAGES) as LanguageCode[]).map((code) => {
+                    const meta = LANGUAGE_META[code]
+                    return (
+                      <button
+                        key={code}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleTranslate(code)
+                        }}
+                        className="w-full flex items-center gap-3 text-left px-3 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-foreground"
+                      >
+                        <span className="text-lg leading-none flex-shrink-0" aria-hidden="true">
+                          {meta.flag}
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block font-medium truncate">{meta.nativeName}</span>
+                          <span className="block text-xs text-muted truncate">{meta.englishName}</span>
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}
