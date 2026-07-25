@@ -4,7 +4,10 @@
   "description": "something here",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "repository": {
     "type": "git",
@@ -13,25 +16,28 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "bugs": {
     "url": "https://github.com/goose-logic/medical_translator/issues"
   },
   "homepage": "https://github.com/goose-logic/medical_translator#readme",
   "dependencies": {
+    "ai": "latest",
+    "better-auth": "^1.6.25",
+    "drizzle-orm": "^0.45.2",
     "next": "^16.2.11",
+    "pg": "^8.22.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "uuid": "^14.0.1"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
     "@types/pg": "^8.20.0",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
-    "better-auth": "^1.6.25",
-    "drizzle-orm": "^0.45.2",
-    "pg": "^8.22.0",
+    "postcss": "^8.4.48",
     "tailwindcss": "^4.3.3",
-    "typescript": "^7.0.2"
+    "typescript": "7.0.2"
   }
 }
