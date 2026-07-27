@@ -9,25 +9,21 @@ import {
   endBookingSession,
   type ProposedAction,
 } from '@/lib/booking-agent'
-import { translateText } from '@/lib/translation'
+import { translateBatch } from '@/lib/translate-batch'
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
 
 // Stagehand needs the Node.js runtime (not edge), and browser automation can be slow.
 export const runtime = 'nodejs'
 export const maxDuration = 120
 
+// Translate a set of short UI strings (booking options, prompts) together in a
+// SINGLE gateway request with retry. This replaces the old per-string parallel
+// fan-out, which under the gateway's burst/rate limit caused several calls to
+// fail at once and silently fall back to English — the reason options were
+// being read aloud in English instead of the user's language.
 async function translateMany(texts: string[], language: LanguageCode): Promise<string[]> {
   if (language === 'en' || texts.length === 0) return texts
-  return Promise.all(
-    texts.map(async (t) => {
-      try {
-        const { translatedText } = await translateText(t, language, 'GP appointment booking website')
-        return translatedText
-      } catch {
-        return t
-      }
-    }),
-  )
+  return translateBatch(texts, language, 'GP appointment booking website')
 }
 
 export async function POST(request: Request) {
