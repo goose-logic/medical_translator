@@ -14,11 +14,13 @@ import {
   Square,
   RefreshCw,
   MousePointerClick,
+  Zap,
 } from 'lucide-react'
 import { useI18n } from '@/components/i18n-provider'
 import { synthesizeSpeech } from '@/app/actions/text-to-speech'
 import { transcribeConfirmation, transcribeChoice } from '@/app/actions/speech-to-text'
 import AppHeader from '@/components/app-header'
+import { isDemoMode, toggleDemoMode as toggleDemoModeState } from '@/lib/demo-mode'
 
 type ProposedAction = {
   description: string
@@ -52,10 +54,16 @@ export default function BookingAgentClient() {
   const [takeover, setTakeover] = useState(false)
   const [recording, setRecording] = useState(false)
   const [interpreting, setInterpreting] = useState(false)
+  const [demoMode, setDemoMode] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
+
+  // Initialize demo mode state from sessionStorage
+  useEffect(() => {
+    setDemoMode(isDemoMode())
+  }, [])
 
   const addEntry = useCallback((kind: TranscriptEntry['kind'], text: string) => {
     setTranscript((prev) => [...prev, { id: crypto.randomUUID(), kind, text }])
@@ -83,17 +91,17 @@ export default function BookingAgentClient() {
   }, [])
 
   const callAgent = useCallback(
-    async (payload: Record<string, unknown>) => {
+    async (payload: object) => {
       const res = await fetch('/api/booking-agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, language }),
+        body: JSON.stringify({ ...payload, language, demoMode }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Request failed')
       return data
     },
-    [language],
+    [language, demoMode],
   )
 
   // Read whatever options the current page offers and present them as choices.
@@ -332,6 +340,34 @@ export default function BookingAgentClient() {
           </div>
         )}
 
+        {/* Demo mode toggle */}
+        <div className="bg-accent/5 border border-accent/20 rounded-lg p-4 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Zap className="w-5 h-5 text-accent flex-shrink-0" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-medium">{t('Demo mode')}</p>
+              <p className="text-xs text-muted">
+                {demoMode
+                  ? t('Using pre-recorded booking flow (no rate limits)')
+                  : t('Using live booking site with AI assistant')}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const newState = toggleDemoModeState()
+              setDemoMode(newState)
+            }}
+            className={
+              demoMode
+                ? 'px-4 py-2 rounded-lg bg-accent text-accent-foreground text-sm font-medium transition-colors hover:bg-accent/90'
+                : 'px-4 py-2 rounded-lg border border-border bg-background text-sm font-medium transition-colors hover:bg-secondary'
+            }
+          >
+            {demoMode ? t('Using Demo') : t('Enable Demo')}
+          </button>
+        </div>
+
         {!sessionId ? (
           <div className="bg-secondary rounded-lg border border-border p-8 text-center">
             <button
@@ -344,7 +380,11 @@ export default function BookingAgentClient() {
               ) : (
                 <Play className="w-5 h-5" aria-hidden="true" />
               )}
-              {starting ? t('Opening booking website...') : t('Start booking assistant')}
+              {demoMode
+                ? t('Start demo booking flow')
+                : starting
+                  ? t('Opening booking website...')
+                  : t('Start booking assistant')}
             </button>
           </div>
         ) : (

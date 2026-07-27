@@ -11,6 +11,7 @@ import {
 } from '@/lib/booking-agent'
 import { translateBatch } from '@/lib/translate-batch'
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
+import { DEMO_BOOKING_FLOWS } from '@/lib/booking-demo-data'
 
 // Stagehand needs the Node.js runtime (not edge), and browser automation can be slow.
 export const runtime = 'nodejs'
@@ -26,6 +27,19 @@ async function translateMany(texts: string[], language: LanguageCode): Promise<s
   return translateBatch(texts, language, 'GP appointment booking website')
 }
 
+// Demo mode sessions: persist stepIndex (which pre-canned step we're on) across requests
+const demoSessions: Map<string, { stepIndex: number; startedAt: number }> = new Map()
+const DEMO_SESSION_TTL_MS = 10 * 60 * 1000
+
+function cleanupExpiredDemoSessions() {
+  const now = Date.now()
+  for (const [id, session] of demoSessions) {
+    if (now - session.startedAt > DEMO_SESSION_TTL_MS) {
+      demoSessions.delete(id)
+    }
+  }
+}
+
 export async function POST(request: Request) {
   // Require an authenticated user — this drives a real external website.
   const session = await auth.api.getSession({ headers: await headers() })
@@ -39,6 +53,7 @@ export async function POST(request: Request) {
     instruction?: string
     proposedAction?: ProposedAction
     language?: LanguageCode
+    demoMode?: boolean
   }
   try {
     body = await request.json()
@@ -48,8 +63,105 @@ export async function POST(request: Request) {
 
   const language: LanguageCode =
     body.language && body.language in SUPPORTED_LANGUAGES ? body.language : 'en'
+  const demoMode = body.demoMode ?? false
 
   try {
+    if (demoMode) {
+      // Demo mode: return pre-canned flows without Stagehand/Browserbase
+      cleanupExpiredDemoSessions()
+      const flow = DEMO_BOOKING_FLOWS[language] || DEMO_BOOKING_FLOWS.en
+
+      switch (body.action) {
+        case 'start': {
+          const demoSessionId = `demo-${Date.now()}-${Math.random().toString(36).slice(2)}`
+          demoSessions.set(demoSessionId, { stepIndex: 0, startedAt: Date.now() })
+          const [intro] = await translateMany(
+            ['I have opened the appointment booking website. Let me guide you through it step by step.'],
+            language,
+          )
+          return NextResponse.json({
+            sessionId: demoSessionId,
+            message: intro,
+            liveViewUrl: 'https://bookings.herohealth.net/s/ysmx8v3z',
+          })
+        }
+
+        case 'observe': {
+          if (!body.sessionId) {
+            return NextResponse.json({ error: 'Missing sessionId' }, { status: 400 })
+          }
+          const session = demoSessions.get(body.sessionId)
+          if (!session) {
+            return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+          }
+          if (session.stepIndex >= flow.length) {
+            // Booking complete, send final message
+            return NextResponse.json({
+              actions: [],
+              pageTitle: 'Booking Complete',
+              liveViewUrl: 'https://bookings.herohealth.net/s/ysmx8v3z',
+            })
+          }
+          const step = flow[session.stepIndex]
+          const descriptions = step.actions.map((a) => a.description)
+          const translated = await translateMany(descriptions, language)
+          const actionsOut = step.actions.map((a, i) => ({
+            ...a,
+            translatedDescription: translated[i],
+          }))
+          return NextResponse.json({
+            actions: actionsOut,
+            pageTitle: step.pageTitle,
+            liveViewUrl: 'https://bookings.herohealth.net/s/ysmx8v3z',
+          })
+        }
+
+        case 'act': {
+          if (!body.sessionId) {
+            return NextResponse.json({ error: 'Missing sessionId' }, { status: 400 })
+          }
+          const session = demoSessions.get(body.sessionId)
+          if (!session) {
+            return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+          }
+          // Advance to next step
+          session.stepIndex += 1
+          const isComplete = session.stepIndex >= flow.length
+          return NextResponse.json({
+            ok: true,
+            complete: isComplete,
+            nextInstruction: isComplete
+              ? 'Your booking has been completed successfully!'
+              : flow[session.stepIndex]?.instruction || 'Continuing...',
+          })
+        }
+
+        case 'read': {
+          if (!body.sessionId) {
+            return NextResponse.json({ error: 'Missing sessionId' }, { status: 400 })
+          }
+          const session = demoSessions.get(body.sessionId)
+          if (!session) {
+            return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+          }
+          const step = flow[Math.min(session.stepIndex, flow.length - 1)]
+          return NextResponse.json({
+            summary: step.instruction,
+            pageTitle: step.pageTitle,
+          })
+        }
+
+        case 'end': {
+          if (body.sessionId) demoSessions.delete(body.sessionId)
+          return NextResponse.json({ ok: true })
+        }
+
+        default:
+          return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+      }
+    }
+
+    // Live mode: use Stagehand/Browserbase
     switch (body.action) {
       case 'start': {
         const result = await startBookingSession()
