@@ -67,21 +67,20 @@ export async function POST(request: Request) {
 
   try {
     if (demoMode) {
-      // Demo mode: return pre-canned flows without Stagehand/Browserbase
+      // Demo mode: return pre-canned, already-translated flows. No Stagehand,
+      // no Browserbase, and NO gateway translation calls — so it never hits a
+      // rate limit and responds instantly.
       cleanupExpiredDemoSessions()
       const flow = DEMO_BOOKING_FLOWS[language] || DEMO_BOOKING_FLOWS.en
+      const steps = flow.steps
 
       switch (body.action) {
         case 'start': {
           const demoSessionId = `demo-${Date.now()}-${Math.random().toString(36).slice(2)}`
           demoSessions.set(demoSessionId, { stepIndex: 0, startedAt: Date.now() })
-          const [intro] = await translateMany(
-            ['I have opened the appointment booking website. Let me guide you through it step by step.'],
-            language,
-          )
           return NextResponse.json({
             sessionId: demoSessionId,
-            message: intro,
+            message: flow.intro,
             liveViewUrl: 'https://bookings.herohealth.net/s/ysmx8v3z',
           })
         }
@@ -94,20 +93,19 @@ export async function POST(request: Request) {
           if (!session) {
             return NextResponse.json({ error: 'Session not found' }, { status: 404 })
           }
-          if (session.stepIndex >= flow.length) {
-            // Booking complete, send final message
+          if (session.stepIndex >= steps.length) {
+            // Booking complete, no more actions
             return NextResponse.json({
               actions: [],
               pageTitle: 'Booking Complete',
               liveViewUrl: 'https://bookings.herohealth.net/s/ysmx8v3z',
             })
           }
-          const step = flow[session.stepIndex]
-          const descriptions = step.actions.map((a) => a.description)
-          const translated = await translateMany(descriptions, language)
-          const actionsOut = step.actions.map((a, i) => ({
+          const step = steps[session.stepIndex]
+          // Descriptions are already localized in the demo data.
+          const actionsOut = step.actions.map((a) => ({
             ...a,
-            translatedDescription: translated[i],
+            translatedDescription: a.description,
           }))
           return NextResponse.json({
             actions: actionsOut,
@@ -126,13 +124,13 @@ export async function POST(request: Request) {
           }
           // Advance to next step
           session.stepIndex += 1
-          const isComplete = session.stepIndex >= flow.length
+          const isComplete = session.stepIndex >= steps.length
           return NextResponse.json({
             ok: true,
             complete: isComplete,
             nextInstruction: isComplete
-              ? 'Your booking has been completed successfully!'
-              : flow[session.stepIndex]?.instruction || 'Continuing...',
+              ? flow.complete
+              : steps[session.stepIndex]?.instruction || flow.complete,
           })
         }
 
@@ -144,7 +142,7 @@ export async function POST(request: Request) {
           if (!session) {
             return NextResponse.json({ error: 'Session not found' }, { status: 404 })
           }
-          const step = flow[Math.min(session.stepIndex, flow.length - 1)]
+          const step = steps[Math.min(session.stepIndex, steps.length - 1)]
           return NextResponse.json({
             summary: step.instruction,
             pageTitle: step.pageTitle,

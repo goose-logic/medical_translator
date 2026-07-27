@@ -55,6 +55,7 @@ export default function BookingAgentClient() {
   const [recording, setRecording] = useState(false)
   const [interpreting, setInterpreting] = useState(false)
   const [demoMode, setDemoMode] = useState(false)
+  const [completed, setCompleted] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -157,6 +158,7 @@ export default function BookingAgentClient() {
   const handleStart = useCallback(async () => {
     setStarting(true)
     setError(null)
+    setCompleted(false)
     try {
       const data = await callAgent({ action: 'start' })
       setSessionId(data.sessionId)
@@ -184,6 +186,18 @@ export default function BookingAgentClient() {
         const data = await callAgent({ action: 'act', sessionId, proposedAction: action })
         if (data.liveViewUrl) setLiveViewUrl(data.liveViewUrl)
         setProposed([])
+        // The agent signals the flow is finished (used by demo mode). Show the
+        // localized completion message and stop — don't re-observe (which would
+        // otherwise fall back to the "no more options" takeover prompt).
+        if (data.complete) {
+          setCompleted(true)
+          setTakeover(false)
+          if (data.nextInstruction) {
+            addEntry('agent', data.nextInstruction)
+            void speak(data.nextInstruction)
+          }
+          return
+        }
         await observeOptions(sessionId, { cookie: false })
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not complete that step.')
@@ -191,7 +205,7 @@ export default function BookingAgentClient() {
         setBusy(false)
       }
     },
-    [sessionId, callAgent, addEntry, observeOptions, t],
+    [sessionId, callAgent, addEntry, observeOptions, speak, t],
   )
 
   // Re-scan the page for options (e.g. after the user clicks directly in the live view).
@@ -298,6 +312,7 @@ export default function BookingAgentClient() {
     setTranscript([])
     setTakeover(false)
     setError(null)
+    setCompleted(false)
   }, [sessionId, recording, callAgent])
 
   const multiple = proposed.length > 1
@@ -454,6 +469,13 @@ export default function BookingAgentClient() {
 
               {/* Selection controls */}
               <div className="border-t border-border p-4 space-y-3">
+                {completed && (
+                  <div className="bg-accent/10 border border-accent/30 rounded-lg p-3 flex items-center gap-2 text-sm leading-relaxed">
+                    <Check className="w-5 h-5 text-accent flex-shrink-0" aria-hidden="true" />
+                    <span className="font-medium">{t('Booking complete')}</span>
+                  </div>
+                )}
+
                 {showControls && proposed.length > 0 && (
                   <>
                     <p className="text-sm font-medium">
