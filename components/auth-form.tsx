@@ -4,8 +4,6 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { authClient } from '@/lib/auth-client'
-import { ensureDemoUser } from '@/app/actions/demo'
-import { DEMO_EMAIL, DEMO_PASSWORD } from '@/lib/demo'
 
 export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   const router = useRouter()
@@ -30,29 +28,6 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
 
     if (error) {
       setError(error.message ?? 'Something went wrong')
-      return
-    }
-
-    router.push('/')
-    router.refresh()
-  }
-
-  const handleDemoLogin = async () => {
-    setError(null)
-    setLoading(true)
-
-    // Make sure the demo account exists (creates it on an empty database),
-    // then sign in with the shared demo credentials.
-    await ensureDemoUser()
-    const { error } = await authClient.signIn.email({
-      email: DEMO_EMAIL,
-      password: DEMO_PASSWORD,
-    })
-
-    setLoading(false)
-
-    if (error) {
-      setError(error.message ?? 'Could not sign in to the demo account')
       return
     }
 
@@ -138,27 +113,6 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
                 : 'Sign in'}
           </button>
         </form>
-
-        {!isSignUp && (
-          <>
-            <div className="flex items-center gap-3 my-5" aria-hidden="true">
-              <span className="h-px flex-1 bg-border" />
-              <span className="text-xs text-muted">or</span>
-              <span className="h-px flex-1 bg-border" />
-            </div>
-            <button
-              type="button"
-              onClick={handleDemoLogin}
-              disabled={loading}
-              className="w-full rounded-lg border border-border bg-background px-4 py-2.5 font-medium text-foreground transition-colors hover:bg-muted/10 disabled:opacity-60"
-            >
-              Try the demo account
-            </button>
-            <p className="text-xs text-muted text-center mt-2">
-              {DEMO_EMAIL} · {DEMO_PASSWORD}
-            </p>
-          </>
-        )}
 
         <p className="text-sm text-muted text-center mt-6">
           {isSignUp ? 'Already have an account? ' : "Don't have an account? "}

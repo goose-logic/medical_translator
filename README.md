@@ -5,11 +5,10 @@ Medical Navigator — a multilingual NHS healthcare support app. See
 
 ## Demo login
 
-The sign-in page has a **"Try the demo account"** button that logs you straight
-in. It provisions the demo account automatically on first use, so it works even
-against a fresh, empty database.
-
-Credentials (if you'd rather type them in):
+Sign in with the demo account on the sign-in page:
 
 - **Email:** `test@test.com`
 - **Password:** `password123`
+
+The account is provisioned automatically when the sign-in page loads, so it
+works even against a fresh, empty database — just enter the credentials above.
