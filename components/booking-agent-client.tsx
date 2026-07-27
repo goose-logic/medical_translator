@@ -56,6 +56,7 @@ export default function BookingAgentClient() {
   const [interpreting, setInterpreting] = useState(false)
   const [demoMode, setDemoMode] = useState(false)
   const [completed, setCompleted] = useState(false)
+  const [completionMessage, setCompletionMessage] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -159,6 +160,7 @@ export default function BookingAgentClient() {
     setStarting(true)
     setError(null)
     setCompleted(false)
+    setCompletionMessage(null)
     try {
       const data = await callAgent({ action: 'start' })
       setSessionId(data.sessionId)
@@ -193,7 +195,9 @@ export default function BookingAgentClient() {
           setCompleted(true)
           setTakeover(false)
           if (data.nextInstruction) {
-            addEntry('agent', data.nextInstruction)
+            // The message is already localized in the demo data, so it renders
+            // in the success banner with zero gateway calls.
+            setCompletionMessage(data.nextInstruction)
             void speak(data.nextInstruction)
           }
           return
@@ -313,6 +317,7 @@ export default function BookingAgentClient() {
     setTakeover(false)
     setError(null)
     setCompleted(false)
+    setCompletionMessage(null)
   }, [sessionId, recording, callAgent])
 
   const multiple = proposed.length > 1
@@ -470,9 +475,9 @@ export default function BookingAgentClient() {
               {/* Selection controls */}
               <div className="border-t border-border p-4 space-y-3">
                 {completed && (
-                  <div className="bg-accent/10 border border-accent/30 rounded-lg p-3 flex items-center gap-2 text-sm leading-relaxed">
-                    <Check className="w-5 h-5 text-accent flex-shrink-0" aria-hidden="true" />
-                    <span className="font-medium">{t('Booking complete')}</span>
+                  <div className="bg-accent/10 border border-accent/30 rounded-lg p-3 flex items-start gap-2 text-sm leading-relaxed">
+                    <Check className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span className="font-medium">{completionMessage}</span>
                   </div>
                 )}
 
