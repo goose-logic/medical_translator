@@ -48,7 +48,12 @@ function resolveBrowserbaseKey(): string {
 
 function modelConfig() {
   return {
-    modelName: 'gpt-4o' as const,
+    // Stagehand 3.7+ requires the `provider/model` format. The bare `gpt-4o`
+    // form is deprecated and falls through to a legacy OpenAI client that reads
+    // OPENAI_API_KEY directly ("OPENAI_API_KEY is missing"). The slash form
+    // routes through the AI SDK path, which passes our apiKey + baseURL to
+    // createOpenAI so requests go through the Vercel AI Gateway.
+    modelName: 'openai/gpt-4o' as const,
     apiKey: process.env.AI_GATEWAY_API_KEY,
     baseURL: 'https://ai-gateway.vercel.sh/v1',
     openaiEndpointFormat: 'chat' as const,
