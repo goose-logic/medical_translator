@@ -6,8 +6,11 @@ import { v4 as uuidv4 } from 'uuid'
 import { db } from '@/lib/db'
 import { translationCache } from '@/lib/db/schema'
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
+import { translationModel, TRANSLATION_MODEL_LABEL } from '@/lib/ai'
 
-const TRANSLATION_MODEL = 'google/gemini-2.0-flash'
+// Direct Google Gemini key when available, else the Vercel AI Gateway.
+// See lib/ai.ts and NOTES.md.
+const TRANSLATION_MODEL = TRANSLATION_MODEL_LABEL
 
 /**
  * Translate an array of short UI strings into the target language.
@@ -75,7 +78,7 @@ Rules:
 
   try {
     const { text } = await generateText({
-      model: TRANSLATION_MODEL,
+      model: translationModel(),
       system: systemPrompt,
       prompt: `Translate these ${missing.length} strings:\n${numbered}`,
       temperature: 0.2,

@@ -2,10 +2,11 @@
 
 import { generateText } from 'ai'
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
+import { translationModel, TRANSLATION_MODEL_LABEL } from '@/lib/ai'
 
-// The AI SDK routes through the Vercel AI Gateway by default, so we can pass a
-// model string directly without installing a provider package.
-const TRANSLATION_MODEL = 'google/gemini-2.0-flash'
+// Prefer a direct Google Gemini key (its own free tier) and fall back to the
+// Vercel AI Gateway. See lib/ai.ts and NOTES.md.
+const TRANSLATION_MODEL = TRANSLATION_MODEL_LABEL
 
 export async function translateText(
   text: string,
@@ -33,7 +34,7 @@ Maintain medical accuracy and clarity. Translate only the text provided, without
 
   try {
     const { text: translatedText } = await generateText({
-      model: TRANSLATION_MODEL,
+      model: translationModel(),
       system: systemPrompt,
       prompt: text,
       temperature: 0.3,
@@ -64,7 +65,7 @@ export async function explainMedicalTerm(
 
   try {
     const { text: explanation } = await generateText({
-      model: TRANSLATION_MODEL,
+      model: translationModel(),
       system: `You are a medical educator. Explain medical and health-related terms in simple, understandable language suitable for patients.
       Always explain in ${targetLangName}.
       Keep explanations concise (2-3 sentences) and avoid jargon.`,
@@ -93,7 +94,7 @@ export async function generateAppointmentSummary(
 
   try {
     const { text: summary } = await generateText({
-      model: TRANSLATION_MODEL,
+      model: translationModel(),
       system: `You are a helpful healthcare assistant. Create a clear, concise summary of an appointment in ${targetLangName}.
       Include: what type of appointment, when, where, and what to prepare.
       Use simple language suitable for patients.`,

@@ -2,6 +2,7 @@
 
 import { generateText } from 'ai'
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/languages'
+import { translationModel } from '@/lib/ai'
 
 function resolveElevenLabsKey(): string | undefined {
   // Env-sync can land the real key in a suffixed var; prefer any usable value.
@@ -117,7 +118,7 @@ export async function transcribeChoice(
 
     const numbered = options.map((o, i) => `${i + 1}. ${o}`).join('\n')
     const { text } = await generateText({
-      model: 'openai/gpt-4o-mini',
+      model: translationModel(),
       prompt: `The user is booking a medical appointment. They were shown these numbered options and asked to choose one. Their spoken reply is in ${SUPPORTED_LANGUAGES[language]}.
 
 Options:
@@ -151,7 +152,7 @@ Answer with only the number, "skip", or "unclear".`,
 async function classifyIntent(transcript: string, language: LanguageCode): Promise<VoiceIntent> {
   try {
     const { text } = await generateText({
-      model: 'openai/gpt-4o-mini',
+      model: translationModel(),
       prompt: `The user is booking a medical appointment and was asked to confirm the assistant's next action. Their reply is in ${SUPPORTED_LANGUAGES[language]}.
 
 Reply: "${transcript}"
