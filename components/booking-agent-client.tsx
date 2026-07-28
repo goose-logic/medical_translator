@@ -14,11 +14,13 @@ import {
   Square,
   RefreshCw,
   MousePointerClick,
+  Zap,
 } from 'lucide-react'
 import { useI18n } from '@/components/i18n-provider'
 import { synthesizeSpeech } from '@/app/actions/text-to-speech'
 import { transcribeConfirmation, transcribeChoice } from '@/app/actions/speech-to-text'
 import AppHeader from '@/components/app-header'
+import { isDemoMode, toggleDemoMode as toggleDemoModeState } from '@/lib/demo-mode'
 
 type ProposedAction = {
   description: string
@@ -52,10 +54,18 @@ export default function BookingAgentClient() {
   const [takeover, setTakeover] = useState(false)
   const [recording, setRecording] = useState(false)
   const [interpreting, setInterpreting] = useState(false)
+  const [demoMode, setDemoMode] = useState(false)
+  const [completed, setCompleted] = useState(false)
+  const [completionMessage, setCompletionMessage] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
+
+  // Initialize demo mode state from sessionStorage
+  useEffect(() => {
+    setDemoMode(isDemoMode())
+  }, [])
 
   const addEntry = useCallback((kind: TranscriptEntry['kind'], text: string) => {
     setTranscript((prev) => [...prev, { id: crypto.randomUUID(), kind, text }])
@@ -83,17 +93,17 @@ export default function BookingAgentClient() {
   }, [])
 
   const callAgent = useCallback(
-    async (payload: Record<string, unknown>) => {
+    async (payload: object) => {
       const res = await fetch('/api/booking-agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, language }),
+        body: JSON.stringify({ ...payload, language, demoMode }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Request failed')
       return data
     },
-    [language],
+    [language, demoMode],
   )
 
   // Read whatever options the current page offers and present them as choices.
@@ -149,6 +159,8 @@ export default function BookingAgentClient() {
   const handleStart = useCallback(async () => {
     setStarting(true)
     setError(null)
+    setCompleted(false)
+    setCompletionMessage(null)
     try {
       const data = await callAgent({ action: 'start' })
       setSessionId(data.sessionId)
@@ -176,6 +188,20 @@ export default function BookingAgentClient() {
         const data = await callAgent({ action: 'act', sessionId, proposedAction: action })
         if (data.liveViewUrl) setLiveViewUrl(data.liveViewUrl)
         setProposed([])
+        // The agent signals the flow is finished (used by demo mode). Show the
+        // localized completion message and stop — don't re-observe (which would
+        // otherwise fall back to the "no more options" takeover prompt).
+        if (data.complete) {
+          setCompleted(true)
+          setTakeover(false)
+          if (data.nextInstruction) {
+            // The message is already localized in the demo data, so it renders
+            // in the success banner with zero gateway calls.
+            setCompletionMessage(data.nextInstruction)
+            void speak(data.nextInstruction)
+          }
+          return
+        }
         await observeOptions(sessionId, { cookie: false })
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not complete that step.')
@@ -183,7 +209,7 @@ export default function BookingAgentClient() {
         setBusy(false)
       }
     },
-    [sessionId, callAgent, addEntry, observeOptions, t],
+    [sessionId, callAgent, addEntry, observeOptions, speak, t],
   )
 
   // Re-scan the page for options (e.g. after the user clicks directly in the live view).
@@ -290,6 +316,8 @@ export default function BookingAgentClient() {
     setTranscript([])
     setTakeover(false)
     setError(null)
+    setCompleted(false)
+    setCompletionMessage(null)
   }, [sessionId, recording, callAgent])
 
   const multiple = proposed.length > 1
@@ -332,6 +360,34 @@ export default function BookingAgentClient() {
           </div>
         )}
 
+        {/* Demo mode toggle */}
+        <div className="bg-accent/5 border border-accent/20 rounded-lg p-4 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Zap className="w-5 h-5 text-accent flex-shrink-0" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-medium">{t('Demo mode')}</p>
+              <p className="text-xs text-muted">
+                {demoMode
+                  ? t('Using pre-recorded booking flow (no rate limits)')
+                  : t('Using live booking site with AI assistant')}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const newState = toggleDemoModeState()
+              setDemoMode(newState)
+            }}
+            className={
+              demoMode
+                ? 'px-4 py-2 rounded-lg bg-accent text-accent-foreground text-sm font-medium transition-colors hover:bg-accent/90'
+                : 'px-4 py-2 rounded-lg border border-border bg-background text-sm font-medium transition-colors hover:bg-secondary'
+            }
+          >
+            {demoMode ? t('Using Demo') : t('Enable Demo')}
+          </button>
+        </div>
+
         {!sessionId ? (
           <div className="bg-secondary rounded-lg border border-border p-8 text-center">
             <button
@@ -344,7 +400,11 @@ export default function BookingAgentClient() {
               ) : (
                 <Play className="w-5 h-5" aria-hidden="true" />
               )}
-              {starting ? t('Opening booking website...') : t('Start booking assistant')}
+              {demoMode
+                ? t('Start demo booking flow')
+                : starting
+                  ? t('Opening booking website...')
+                  : t('Start booking assistant')}
             </button>
           </div>
         ) : (
@@ -414,6 +474,13 @@ export default function BookingAgentClient() {
 
               {/* Selection controls */}
               <div className="border-t border-border p-4 space-y-3">
+                {completed && (
+                  <div className="bg-accent/10 border border-accent/30 rounded-lg p-3 flex items-start gap-2 text-sm leading-relaxed">
+                    <Check className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span className="font-medium">{completionMessage}</span>
+                  </div>
+                )}
+
                 {showControls && proposed.length > 0 && (
                   <>
                     <p className="text-sm font-medium">

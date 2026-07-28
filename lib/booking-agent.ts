@@ -47,11 +47,25 @@ function resolveBrowserbaseKey(): string {
 }
 
 function modelConfig() {
+  // Route through the Vercel AI Gateway *provider* (`gateway/<provider>/<model>`)
+  // rather than the openai provider with an explicit baseURL. This is what makes
+  // it work in BOTH environments:
+  //   - Production: no AI_GATEWAY_API_KEY is set, so we pass NO client options.
+  //     Stagehand then uses the bare `gateway` provider, which authenticates via
+  //     Vercel's OIDC token automatically (the same mechanism the translation
+  //     features already use successfully in prod).
+  //   - Dev: v0 provides AI_GATEWAY_API_KEY, so we pass it and the gateway
+  //     provider uses it directly.
+  //
+  // The previous config (`openai/gpt-4o` + baseURL + apiKey) broke in prod:
+  // with AI_GATEWAY_API_KEY undefined, Stagehand called
+  // createOpenAI({ apiKey: undefined, baseURL }), which falls back to reading
+  // OPENAI_API_KEY and throws "OPENAI_API_KEY is missing or empty".
+  const apiKey = process.env.AI_GATEWAY_API_KEY
   return {
-    modelName: 'gpt-4o' as const,
-    apiKey: process.env.AI_GATEWAY_API_KEY,
-    baseURL: 'https://ai-gateway.vercel.sh/v1',
-    openaiEndpointFormat: 'chat' as const,
+    modelName: 'gateway/openai/gpt-4o' as const,
+    // Only include apiKey when present so prod falls back to OIDC auth.
+    ...(apiKey ? { apiKey } : {}),
   }
 }
 
